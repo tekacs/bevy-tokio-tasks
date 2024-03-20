@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use bevy::prelude::{
     App, Camera2dBundle, ClearColor, Color, Commands, DefaultPlugins, ResMut, Update,
@@ -22,7 +22,7 @@ fn main() {
             make_runtime: Box::new(|| {
                 let mut runtime = tokio::runtime::Builder::new_current_thread();
                 runtime.enable_all();
-                runtime.build().unwrap()
+                Arc::new(runtime.build().unwrap())
             }),
             ..bevy_tokio_tasks::TokioTasksPlugin::default()
         })

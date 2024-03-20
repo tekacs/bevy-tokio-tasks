@@ -31,7 +31,7 @@ pub struct TokioTasksPlugin {
     /// default value for this field configures a multi-threaded [`Runtime`] with IO and timer
     /// functionality enabled if building for non-wasm32 architectures. On wasm32 the current-thread
     /// scheduler is used instead.
-    pub make_runtime: Box<dyn Fn() -> Runtime + Send + Sync + 'static>,
+    pub make_runtime: Box<dyn Fn() -> Arc<Runtime> + Send + Sync + 'static>,
 }
 
 impl Default for TokioTasksPlugin {
@@ -46,9 +46,11 @@ impl Default for TokioTasksPlugin {
                 #[cfg(target_arch = "wasm32")]
                 let mut runtime = tokio::runtime::Builder::new_current_thread();
                 runtime.enable_all();
-                runtime
-                    .build()
-                    .expect("Failed to create Tokio runtime for background tasks")
+                Arc::new(
+                    runtime
+                        .build()
+                        .expect("Failed to create Tokio runtime for background tasks"),
+                )
             }),
         }
     }
@@ -99,7 +101,7 @@ pub struct TokioTasksRuntime(Box<TokioTasksRuntimeInner>);
 /// The inner fields are boxed to reduce the cost of the every-frame move out of and back into
 /// the world in [`tick_runtime_update`].
 struct TokioTasksRuntimeInner {
-    runtime: Runtime,
+    runtime: Arc<Runtime>,
     ticks: Arc<AtomicUsize>,
     update_watch_rx: tokio::sync::watch::Receiver<()>,
     update_run_tx: tokio::sync::mpsc::UnboundedSender<MainThreadCallback>,
@@ -109,7 +111,7 @@ struct TokioTasksRuntimeInner {
 impl TokioTasksRuntime {
     fn new(
         ticks: Arc<AtomicUsize>,
-        runtime: Runtime,
+        runtime: Arc<Runtime>,
         update_watch_rx: tokio::sync::watch::Receiver<()>,
     ) -> Self {
         let (update_run_tx, update_run_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -127,6 +129,12 @@ impl TokioTasksRuntime {
     /// how this is created by providing a custom [`make_runtime`](TokioTasksPlugin::make_runtime).
     pub fn runtime(&self) -> &Runtime {
         &self.0.runtime
+    }
+
+    /// Returns the Tokio [`Runtime`] on which background tasks are executed. You can specify
+    /// how this is created by providing a custom [`make_runtime`](TokioTasksPlugin::make_runtime).
+    pub fn runtime_arc(&self) -> Arc<Runtime> {
+        self.0.runtime.clone()
     }
 
     /// Spawn a task which will run on the background Tokio [`Runtime`] managed by this [`TokioTasksRuntime`]. The
